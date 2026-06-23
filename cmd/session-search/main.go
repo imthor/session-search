@@ -71,11 +71,15 @@ func run(cmd *cobra.Command, args []string) error {
 	// Fast rg prefilter ONLY for batch query cases (to keep TUI corpus complete for clearing query)
 	if forceBatch && query != "" && internal.HasRippingFastSearch() {
 		roots := internal.ResolveRoots("claude", locations)
-		if cand, err := internal.FindCandidateFilesByRG(query, roots); err == nil && len(cand) > 0 {
+		cand, err := internal.FindCandidateFilesByRG(query, roots)
+		if err != nil {
+			return fmt.Errorf("ripgrep failed: %w", err)
+		}
+		if len(cand) > 0 {
 			sessions := claude.ParseSessionFiles(cand)
 			return runBatch(sessions, query)
 		}
-		// fall to full scan for batch if no rg hit
+		// no matches from rg (no error), fall to full scan (will find 0)
 	}
 
 	sessions, err := internal.ScanAll(extra)

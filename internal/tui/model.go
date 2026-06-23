@@ -146,20 +146,46 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.quitting = true
 				return m, tea.Quit
 			}
-		case "pgup", "pgdown", "ctrl+u", "ctrl+d", "ctrl+b", "ctrl+f":
-			// Forward to right preview pane for scrolling
-			m.preview, cmd = m.preview.Update(msg)
-			cmds = append(cmds, cmd)
+		// Preview scrolling: use pg and ctrl variants; reserve plain b/f for typing in query input
+		case "pgup", "ctrl+b":
+			m.preview.PageUp()
+			cmds = append(cmds, nil)
 			return m, tea.Batch(cmds...)
+		case "pgdown", "ctrl+f":
+			m.preview.PageDown()
+			cmds = append(cmds, nil)
+			return m, tea.Batch(cmds...)
+		case "ctrl+u":
+			m.preview.HalfPageUp()
+			return m, nil
+		case "ctrl+d":
+			m.preview.HalfPageDown()
+			return m, nil
+		// List navigation: call methods directly for ctrl variants (list keymap doesn't bind ctrl+p etc)
+		case "up", "ctrl+p", "ctrl+k":
+			m.list.CursorUp()
+			// refresh preview
+			if sel, ok := m.list.SelectedItem().(sessionItem); ok {
+				m.preview.SetContent(m.buildPreview(sel.session))
+				m.preview.GotoTop()
+			}
+			return m, nil
+		case "down", "ctrl+n", "ctrl+j":
+			m.list.CursorDown()
+			if sel, ok := m.list.SelectedItem().(sessionItem); ok {
+				m.preview.SetContent(m.buildPreview(sel.session))
+				m.preview.GotoTop()
+			}
+			return m, nil
 		default:
-			// Always give the key to the input first (for query typing)
+			// Always give the key to the input first (for query typing). Do NOT forward typing chars to list.
 			m.input, cmd = m.input.Update(msg)
 			cmds = append(cmds, cmd)
 			newQ := strings.TrimSpace(m.input.Value())
 			if newQ != prevQuery {
 				m.filter()
 			}
-			// Only forward pure navigation keys to the list (avoid j/k etc stealing query chars)
+			// Only forward pure navigation (non-typing) keys to the list
 			if isNavigationKey(k) {
 				m.list, cmd = m.list.Update(msg)
 				cmds = append(cmds, cmd)
