@@ -136,12 +136,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		k := msg.String()
+		// Quit keys must be handled unconditionally, outside any navigation guard,
+		// so Esc/Ctrl-C always cancel even if they would otherwise go to input.
+		switch k {
+		case "ctrl+c", "esc":
+			m.quitting = true
+			return m, tea.Quit
+		}
 		// Handle ALL navigation first, BEFORE any input update, so they never edit the query.
 		if isNavigationKey(k) {
 			switch k {
-			case "ctrl+c", "esc":
-				m.quitting = true
-				return m, tea.Quit
 			case "enter":
 				if i, ok := m.list.SelectedItem().(sessionItem); ok {
 					m.selected = &i.session
@@ -176,7 +180,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.preview.GotoTop()
 				}
 				return m, nil
-			// Other nav (arrows etc) - let list handle via Update, but we already caught input
+			// Other nav (arrows/home/end etc) - let list handle via Update, but we already caught input
 			default:
 				// For arrows/home/end etc, forward to list
 				m.list, cmd = m.list.Update(msg)
