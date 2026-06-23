@@ -71,15 +71,25 @@ func run(cmd *cobra.Command, args []string) error {
 	// Fast rg prefilter ONLY for batch query cases (to keep TUI corpus complete for clearing query)
 	if forceBatch && query != "" && internal.HasRippingFastSearch() {
 		roots := internal.ResolveRoots("claude", locations)
-		cand, err := internal.FindCandidateFilesByRG(query, roots)
-		if err != nil {
-			return fmt.Errorf("ripgrep failed: %w", err)
+		// Filter to existing roots only; rg fails (exit 2) on any missing dir, but normal scanner skips them.
+		// This prevents surfacing "rg error" for common partial/missing location scenarios (e.g. stale --locations or desktop-only install).
+		validRoots := roots[:0]
+		for _, r := range roots {
+			if _, err := os.Stat(r); err == nil {
+				validRoots = append(validRoots, r)
+			}
 		}
-		if len(cand) > 0 {
-			sessions := claude.ParseSessionFiles(cand)
-			return runBatch(sessions, query)
+		if len(validRoots) > 0 {
+			cand, err := internal.FindCandidateFilesByRG(query, validRoots)
+			if err != nil {
+				return fmt.Errorf("ripgrep failed: %w", err)
+			}
+			if len(cand) > 0 {
+				sessions := claude.ParseSessionFiles(cand)
+				return runBatch(sessions, query)
+			}
 		}
-		// no matches from rg (no error), fall to full scan (will find 0)
+		// no valid roots or no matches from rg, fall to full scan
 	}
 
 	sessions, err := internal.ScanAll(extra)
