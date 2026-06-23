@@ -43,7 +43,9 @@ type sessionItem struct {
 
 func (i sessionItem) Title() string       { return i.title }
 func (i sessionItem) Description() string { return i.desc }
-func (i sessionItem) FilterValue() string { return i.session.Project + " " + i.session.Preview + " " + i.session.Blurb }
+func (i sessionItem) FilterValue() string {
+	return i.session.Project + " " + i.session.Preview + " " + i.session.Blurb
+}
 
 type model struct {
 	all         []core.Session
@@ -362,11 +364,11 @@ func (m model) View() string {
 
 	// Left list pane
 	listView := m.list.View()
-	left := leftPaneStyle.Width(m.width*55/100).Height(m.list.Height() + 2).Render(inputView + "\n" + listView)
+	left := leftPaneStyle.Width(m.width * 55 / 100).Height(m.list.Height() + 2).Render(inputView + "\n" + listView)
 
 	// Right preview
 	previewContent := m.preview.View()
-	right := previewStyle.Width(m.width - (m.width*55/100) - 4).Render(previewContent)
+	right := previewStyle.Width(m.width - (m.width * 55 / 100) - 4).Render(previewContent)
 
 	mainArea := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 

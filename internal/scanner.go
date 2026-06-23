@@ -85,7 +85,6 @@ func FindCandidateFilesByRG(query string, roots []string) ([]string, error) {
 	return files, nil
 }
 
-
 // FuzzyFilter performs fast fuzzy matching over the blurb + project fields.
 // Returns sessions sorted by best match.
 func FuzzyFilter(sessions []core.Session, query string) []core.Session {
