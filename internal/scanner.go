@@ -2,6 +2,7 @@ package internal
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
@@ -31,11 +32,12 @@ func ScanAll(extraRoots map[string][]string) ([]core.Session, error) {
 	for name, prov := range providers.Registry {
 		roots := prov.DefaultRoots()
 		if extra, ok := extraRoots[name]; ok && len(extra) > 0 {
-			roots = append(roots, extra...)
+			roots = extra
 		}
 		sess, err := prov.DiscoverSessions(roots)
 		if err != nil {
-			// continue with other providers
+			fmt.Fprintf(os.Stderr, "warning: %s provider discovery failed: %v\n", name, err)
+			// continue with other providers (graceful; future multi-provider)
 			continue
 		}
 		mu.Lock()
@@ -60,7 +62,7 @@ func FindCandidateFilesByRG(query string, roots []string) ([]string, error) {
 		return nil, err
 	}
 
-	args := []string{"--files-with-matches", "--no-heading", "-l", "-F", "--glob", "*.jsonl", query}
+	args := []string{"--files-with-matches", "--no-heading", "-l", "-F", "-i", "--glob", "*.jsonl", query}
 	args = append(args, roots...)
 
 	cmd := exec.Command("rg", args...)

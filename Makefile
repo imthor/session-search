@@ -8,6 +8,7 @@ build:
 	go build -ldflags="-s -w" -o $(BIN_DIR)/$(BINARY) ./cmd/session-search
 
 install: build
+	mkdir -p $(HOME)/.local/bin
 	install -m 755 $(BIN_DIR)/$(BINARY) $(HOME)/.local/bin/$(BINARY)
 
 run: build
@@ -19,6 +20,10 @@ clean:
 # Quick development loop
 dev:
 	go run ./cmd/session-search
+
+# Note: add real tests in future. `make test` must fail on real test or build failures.
+test:
+	go test ./...
 
 # Example: search and get JSON for another tool
 example-json:

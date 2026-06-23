@@ -109,12 +109,15 @@ func findAllJSONL(roots []string) ([]string, error) {
 				if d.IsDir() {
 					// Skip heavy irrelevant dirs inside .claude if any
 					name := d.Name()
-					if name == "node_modules" || name == ".git" {
+					if name == "node_modules" || name == ".git" || name == "subagents" || name == "subagent" {
 						return filepath.SkipDir
 					}
 					return nil
 				}
 				if strings.HasSuffix(path, ".jsonl") {
+					if !isLikelySessionFile(path) {
+						return nil
+					}
 					mu.Lock()
 					files = append(files, path)
 					mu.Unlock()
@@ -128,6 +131,9 @@ func findAllJSONL(roots []string) ([]string, error) {
 }
 
 func parseLightSession(path string) (core.Session, bool) {
+	if !isLikelySessionFile(path) {
+		return core.Session{}, false
+	}
 	f, err := os.Open(path)
 	if err != nil {
 		return core.Session{}, false
@@ -218,6 +224,13 @@ func parseLightSession(path string) (core.Session, bool) {
 		}
 	}
 
+	if err := scanner.Err(); err != nil {
+		// Huge line (tool output etc) truncated the scan; accept what we have if it looks like a real session.
+		if sess.ID == "" && firstUser == "" && len(blurbParts) == 0 {
+			return core.Session{}, false
+		}
+	}
+
 	if firstTS.IsZero() {
 		firstTS = time.Now()
 	}
@@ -238,6 +251,12 @@ func parseLightSession(path string) (core.Session, bool) {
 	}
 	if sess.Project == "" || sess.Project == "unknown" {
 		sess.Project = sess.ProjectKey
+	}
+
+	// Only require an ID (from sessionId or filename). Empty sessions are valid; junk files
+	// are primarily filtered by name/dir skips in findAllJSONL.
+	if sess.ID == "" {
+		return core.Session{}, false
 	}
 
 	return sess, true
@@ -324,6 +343,26 @@ func sortByTimeDesc(s []core.Session) {
 	sort.Slice(s, func(i, j int) bool {
 		return s[i].Start.After(s[j].Start)
 	})
+}
+
+// isLikelySessionFile filters out non-conversation JSONL files that live alongside sessions
+// (audit logs, subagent transcripts, jobs/timeline, history, etc).
+// Real sessions are under .../projects/<bucket>/*.jsonl (including nested desktop layouts).
+// Applied in both full discovery and rg-candidate paths.
+// Uses ToSlash for Windows (\) compatibility.
+func isLikelySessionFile(path string) bool {
+	p := filepath.ToSlash(path)
+	if !strings.Contains(p, "/projects/") {
+		return false
+	}
+	base := filepath.Base(path)
+	if base == "audit.jsonl" {
+		return false
+	}
+	if strings.Contains(p, "/subagents/") || strings.Contains(p, "/subagent/") {
+		return false
+	}
+	return true
 }
 
 // ParseSessionFiles is exported for the fast rg-candidate path in the CLI.

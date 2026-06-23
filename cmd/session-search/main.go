@@ -12,7 +12,6 @@ import (
 	"github.com/imthor/session-search/internal"
 	"github.com/imthor/session-search/internal/core"
 	_ "github.com/imthor/session-search/internal/providers/claude" // auto-register claude provider
-	claude "github.com/imthor/session-search/internal/providers/claude"
 	"github.com/imthor/session-search/internal/tui"
 )
 
@@ -68,30 +67,12 @@ func run(cmd *cobra.Command, args []string) error {
 
 	forceBatch := asJSON || noTUI || !isInteractive()
 
-	// Fast rg prefilter ONLY for batch query cases (to keep TUI corpus complete for clearing query)
-	if forceBatch && query != "" && internal.HasRippingFastSearch() {
-		roots := internal.ResolveRoots("claude", locations)
-		// Filter to existing roots only; rg fails (exit 2) on any missing dir, but normal scanner skips them.
-		// This prevents surfacing "rg error" for common partial/missing location scenarios (e.g. stale --locations or desktop-only install).
-		validRoots := roots[:0]
-		for _, r := range roots {
-			if _, err := os.Stat(r); err == nil {
-				validRoots = append(validRoots, r)
-			}
-		}
-		if len(validRoots) > 0 {
-			cand, err := internal.FindCandidateFilesByRG(query, validRoots)
-			if err != nil {
-				return fmt.Errorf("ripgrep failed: %w", err)
-			}
-			if len(cand) > 0 {
-				sessions := claude.ParseSessionFiles(cand)
-				return runBatch(sessions, query)
-			}
-		}
-		// no valid roots or no matches from rg, fall to full scan
-	}
-
+	// Always use full corpus + FuzzyFilter for batch too. This guarantees correct, consistent
+	// fuzzy semantics regardless of whether ripgrep finds literal hits elsewhere. The rg
+	// prefilter was removed because it made batch results depend on presence of exact matches
+	// (violating advertised fuzzy behavior and dropping fuzzy-only or late-blurb matches).
+	// Discovery/parse remains fast via parallel light sessions; rg functions left for potential
+	// future literal fast-path or tooling use.
 	sessions, err := internal.ScanAll(extra)
 	if err != nil {
 		return err
@@ -185,6 +166,7 @@ func emit(s *core.Session) {
 }
 
 func isInteractive() bool {
-	fi, _ := os.Stdout.Stat()
-	return (fi.Mode() & os.ModeCharDevice) != 0
+	fo, _ := os.Stdout.Stat()
+	fi, _ := os.Stdin.Stat()
+	return (fo.Mode() & os.ModeCharDevice) != 0 && (fi.Mode() & os.ModeCharDevice) != 0
 }

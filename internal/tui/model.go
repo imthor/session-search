@@ -318,28 +318,45 @@ func getMatchedReference(path string, query string) string {
 	}
 	defer f.Close()
 
-	reader := bufio.NewReader(f)
+	// Use bounded scanner (same limits as light parser) to avoid OOM on huge JSONL lines (tool dumps etc).
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, 128*1024), 4*1024*1024)
+
+	// Relaxed match: try full query, then individual words (>2 chars) to be fuzzy-query friendly.
+	terms := []string{qLower}
+	for _, w := range strings.Fields(query) {
+		wl := strings.ToLower(w)
+		if len(wl) > 2 {
+			terms = append(terms, wl)
+		}
+	}
+
 	var collected []string
 	count := 0
-	for {
-		line, err := reader.ReadString('\n')
-		if len(line) > 0 {
-			line = strings.TrimRight(line, "\n\r")
-			if strings.Contains(strings.ToLower(line), qLower) {
-				if content := extractReadableContent(line); content != "" {
-					collected = append(collected, content)
-				} else {
-					collected = append(collected, line) // full for matched reference; viewport scrolls
-				}
-				count++
-				if count >= 4 {
-					break
-				}
+	for scanner.Scan() {
+		line := strings.TrimRight(scanner.Text(), "\n\r")
+		low := strings.ToLower(line)
+		matched := false
+		for _, t := range terms {
+			if strings.Contains(low, t) {
+				matched = true
+				break
 			}
 		}
-		if err != nil {
-			break
+		if matched {
+			if content := extractReadableContent(line); content != "" {
+				collected = append(collected, content)
+			} else {
+				collected = append(collected, line)
+			}
+			count++
+			if count >= 4 {
+				break
+			}
 		}
+	}
+	if err := scanner.Err(); err != nil {
+		// oversized line; we may have missed one match but collected others safely
 	}
 
 	if len(collected) == 0 {
