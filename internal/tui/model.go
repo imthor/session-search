@@ -180,9 +180,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.preview.GotoTop()
 				}
 				return m, nil
-			// Other nav (arrows/home/end etc) - let list handle via Update, but we already caught input
+			// Fallback for list-specific nav keys not explicitly handled above (e.g. tab/shift+tab).
+			// Text-editing keys (space/" ", left, right, home, end, etc.) are excluded from
+			// isNavigationKey and correctly routed to input below instead.
 			default:
-				// For arrows/home/end etc, forward to list
 				m.list, cmd = m.list.Update(msg)
 				cmds = append(cmds, cmd)
 				// refresh preview
@@ -512,7 +513,8 @@ func wrapText(s string, width int) string {
 
 func isNavigationKey(k string) bool {
 	switch k {
-	case "up", "down", "left", "right", "pgup", "pgdown", "home", "end", "tab", "shift+tab", "enter", "space":
+	// Pure list/preview navigation only. Editing keys (space, left, right, home, end) must go to input for query editing.
+	case "up", "down", "pgup", "pgdown", "tab", "shift+tab", "enter":
 		return true
 	case "ctrl+p", "ctrl+n", "ctrl+b", "ctrl+f", "ctrl+u", "ctrl+d", "ctrl+k", "ctrl+j":
 		return true
