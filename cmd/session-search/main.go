@@ -68,14 +68,14 @@ func run(cmd *cobra.Command, args []string) error {
 
 	forceBatch := asJSON || noTUI || !isInteractive()
 
+	// Fast rg prefilter ONLY for batch query cases (to keep TUI corpus complete for clearing query)
 	if forceBatch && query != "" && internal.HasRippingFastSearch() {
-		// Fast path: use rg to find candidate files first (ripgrep speed), parse only them.
 		roots := internal.ResolveRoots("claude", locations)
 		if cand, err := internal.FindCandidateFilesByRG(query, roots); err == nil && len(cand) > 0 {
 			sessions := claude.ParseSessionFiles(cand)
-			return runBatchFromSessions(sessions, query) // skip full scan
+			return runBatch(sessions, query)
 		}
-		// Fall through to normal if rg gave nothing
+		// fall to full scan for batch if no rg hit
 	}
 
 	sessions, err := internal.ScanAll(extra)
@@ -92,7 +92,7 @@ func run(cmd *cobra.Command, args []string) error {
 		return runBatch(sessions, query)
 	}
 
-	// Interactive TUI
+	// Interactive TUI - always full corpus
 	selected, err := tui.RunTUI(sessions, query)
 	if err != nil {
 		return err

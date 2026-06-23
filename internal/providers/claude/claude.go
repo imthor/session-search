@@ -134,8 +134,9 @@ func parseLightSession(path string) (core.Session, bool) {
 	}
 	defer f.Close()
 
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 0, 32*1024), 1024*1024)
+	scanner := bufio.NewScanner(f)
+	// Increase buffer significantly for long lines (tool outputs, diffs, large pastes in sessions)
+	scanner.Buffer(make([]byte, 0, 128*1024), 4*1024*1024)
 
 	sess := core.Session{
 		Provider: "claude",
@@ -153,8 +154,8 @@ func parseLightSession(path string) (core.Session, bool) {
 	var blurbParts []string
 	var firstTS time.Time
 
-	for sc.Scan() {
-		line := sc.Bytes()
+	for scanner.Scan() {
+		line := scanner.Bytes()
 		if len(line) < 10 {
 			continue
 		}

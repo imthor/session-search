@@ -63,7 +63,18 @@ func FindCandidateFilesByRG(query string, roots []string) ([]string, error) {
 	args := []string{"--files-with-matches", "--no-heading", "-l", "-F", "--glob", "*.jsonl", query}
 	args = append(args, roots...)
 
-	out, _ := exec.Command("rg", args...).CombinedOutput() // rg exits 1 on no matches, ignore
+	cmd := exec.Command("rg", args...)
+	out, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			if exitErr.ExitCode() == 1 {
+				return []string{}, nil // no matches ok
+			}
+			// real error (2 etc), return it
+			return nil, fmt.Errorf("rg error: %s", string(exitErr.Stderr))
+		}
+		return nil, err
+	}
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
 	var files []string
 	for _, l := range lines {
