@@ -136,61 +136,67 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		k := msg.String()
-		switch k {
-		case "ctrl+c", "esc":
-			m.quitting = true
-			return m, tea.Quit
-		case "enter":
-			if i, ok := m.list.SelectedItem().(sessionItem); ok {
-				m.selected = &i.session
+		// Handle ALL navigation first, BEFORE any input update, so they never edit the query.
+		if isNavigationKey(k) {
+			switch k {
+			case "ctrl+c", "esc":
 				m.quitting = true
 				return m, tea.Quit
-			}
-		// Preview scrolling: use pg and ctrl variants; reserve plain b/f for typing in query input
-		case "pgup", "ctrl+b":
-			m.preview.PageUp()
-			cmds = append(cmds, nil)
-			return m, tea.Batch(cmds...)
-		case "pgdown", "ctrl+f":
-			m.preview.PageDown()
-			cmds = append(cmds, nil)
-			return m, tea.Batch(cmds...)
-		case "ctrl+u":
-			m.preview.HalfPageUp()
-			return m, nil
-		case "ctrl+d":
-			m.preview.HalfPageDown()
-			return m, nil
-		// List navigation: call methods directly for ctrl variants (list keymap doesn't bind ctrl+p etc)
-		case "up", "ctrl+p", "ctrl+k":
-			m.list.CursorUp()
-			// refresh preview
-			if sel, ok := m.list.SelectedItem().(sessionItem); ok {
-				m.preview.SetContent(m.buildPreview(sel.session))
-				m.preview.GotoTop()
-			}
-			return m, nil
-		case "down", "ctrl+n", "ctrl+j":
-			m.list.CursorDown()
-			if sel, ok := m.list.SelectedItem().(sessionItem); ok {
-				m.preview.SetContent(m.buildPreview(sel.session))
-				m.preview.GotoTop()
-			}
-			return m, nil
-		default:
-			// Always give the key to the input first (for query typing). Do NOT forward typing chars to list.
-			m.input, cmd = m.input.Update(msg)
-			cmds = append(cmds, cmd)
-			newQ := strings.TrimSpace(m.input.Value())
-			if newQ != prevQuery {
-				m.filter()
-			}
-			// Only forward pure navigation (non-typing) keys to the list
-			if isNavigationKey(k) {
+			case "enter":
+				if i, ok := m.list.SelectedItem().(sessionItem); ok {
+					m.selected = &i.session
+					m.quitting = true
+					return m, tea.Quit
+				}
+			// Preview scroll keys (direct, no keymap reliance)
+			case "pgup", "ctrl+b":
+				m.preview.PageUp()
+				return m, nil
+			case "pgdown", "ctrl+f":
+				m.preview.PageDown()
+				return m, nil
+			case "ctrl+u":
+				m.preview.HalfPageUp()
+				return m, nil
+			case "ctrl+d":
+				m.preview.HalfPageDown()
+				return m, nil
+			// List nav (direct calls; bypasses list's limited keymap for ctrl variants)
+			case "up", "ctrl+p", "ctrl+k":
+				m.list.CursorUp()
+				if sel, ok := m.list.SelectedItem().(sessionItem); ok {
+					m.preview.SetContent(m.buildPreview(sel.session))
+					m.preview.GotoTop()
+				}
+				return m, nil
+			case "down", "ctrl+n", "ctrl+j":
+				m.list.CursorDown()
+				if sel, ok := m.list.SelectedItem().(sessionItem); ok {
+					m.preview.SetContent(m.buildPreview(sel.session))
+					m.preview.GotoTop()
+				}
+				return m, nil
+			// Other nav (arrows etc) - let list handle via Update, but we already caught input
+			default:
+				// For arrows/home/end etc, forward to list
 				m.list, cmd = m.list.Update(msg)
 				cmds = append(cmds, cmd)
+				// refresh preview
+				if sel, ok := m.list.SelectedItem().(sessionItem); ok {
+					m.preview.SetContent(m.buildPreview(sel.session))
+					m.preview.GotoTop()
+				}
+				return m, tea.Batch(cmds...)
 			}
 		}
+		// Non-navigation: safe to give to input for typing/filter
+		m.input, cmd = m.input.Update(msg)
+		cmds = append(cmds, cmd)
+		newQ := strings.TrimSpace(m.input.Value())
+		if newQ != prevQuery {
+			m.filter()
+		}
+		// Do not forward non-nav to list (prevents j/k etc from navigating while typing)
 
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -289,7 +295,8 @@ func (m model) buildPreview(s core.Session) string {
 		b.WriteString(highlightSimple(plainWrapped, m.query))
 	} else {
 		b.WriteString(lipgloss.NewStyle().Bold(true).Render("Preview:") + "\n")
-		b.WriteString(highlightSimple(s.Blurb, m.query))
+		plainWrapped := wrapText(s.Blurb, m.preview.Width-2)
+		b.WriteString(highlightSimple(plainWrapped, m.query))
 	}
 
 	return b.String()
